@@ -1,0 +1,58 @@
+-- =====================================================================
+-- PROJECT 6 - DATA-QUALITY CHECKS (run before trusting the load)
+-- =====================================================================
+USE WAREHOUSE ANALYTICS_WH;
+USE DATABASE CHANNEL_ANALYTICS;
+USE SCHEMA STG;
+
+-- Detail views your follow-up emails are built from
+CREATE OR REPLACE VIEW VW_CONTROL_TOTAL_MISMATCH AS
+WITH line_tot AS (SELECT SUBMISSION_ID, SUM(QTY) AS LINE_QTY FROM VW_POS_LINES GROUP BY 1)
+SELECT h.SUBMISSION_ID, h.DIST_CODE, h.REPORT_WEEK, h.CONTROL_TOTAL_QTY, t.LINE_QTY,
+       t.LINE_QTY - h.CONTROL_TOTAL_QTY AS DIFFERENCE
+FROM VW_SUBMISSION_HEADER h
+JOIN line_tot t ON h.SUBMISSION_ID = t.SUBMISSION_ID
+WHERE h.IS_LATEST AND h.CONTROL_TOTAL_QTY <> t.LINE_QTY;
+
+CREATE OR REPLACE VIEW VW_MISSING_SUBMISSIONS AS
+WITH weeks AS (
+    SELECT DISTINCT WEEK_START FROM RAW.DIM_DATE WHERE WEEK_START BETWEEN '2024-01-01' AND '2026-06-22'
+),
+active AS (SELECT DISTINCT UPPER(TRIM(DIST_CODE)) AS DIST_CODE FROM CRM_ACCOUNTS WHERE STATUS = 'Active')
+SELECT a.DIST_CODE, w.WEEK_START AS MISSING_WEEK
+FROM active a CROSS JOIN weeks w
+WHERE NOT EXISTS (SELECT 1 FROM VW_SUBMISSION_HEADER h
+                  WHERE h.DIST_CODE = a.DIST_CODE AND h.REPORT_WEEK = w.WEEK_START);
+
+CREATE OR REPLACE VIEW VW_LATE_SUBMISSIONS AS
+SELECT SUBMISSION_ID, DIST_CODE, REPORT_WEEK, SUBMITTED_AT,
+       DATEDIFF('day', REPORT_WEEK, SUBMITTED_AT) AS DAYS_AFTER_WEEK_START
+FROM VW_SUBMISSION_HEADER
+WHERE IS_LATEST AND SUBMITTED_AT > DATEADD('day', 10, REPORT_WEEK);
+
+-- One-row-per-check scorecard
+CREATE OR REPLACE VIEW VW_POS_DQ_CHECKS AS
+WITH status AS (SELECT STATUS, COUNT(*) AS N FROM VW_POS_LINES_VALIDATED GROUP BY 1),
+checks AS (
+    SELECT 'Control total mismatch (latest submissions)' AS CHECK_NAME,
+           (SELECT COUNT(*) FROM VW_CONTROL_TOTAL_MISMATCH) AS FAILURES
+    UNION ALL SELECT 'Missing weekly submissions', (SELECT COUNT(*) FROM VW_MISSING_SUBMISSIONS)
+    UNION ALL SELECT 'Late submissions (>10 days after week)', (SELECT COUNT(*) FROM VW_LATE_SUBMISSIONS)
+    UNION ALL SELECT 'Lines rejected: unmapped SKU',
+                     COALESCE((SELECT N FROM status WHERE STATUS = 'REJECTED: unmapped SKU'), 0)
+    UNION ALL SELECT 'Lines rejected: invalid quantity',
+                     COALESCE((SELECT N FROM status WHERE STATUS = 'REJECTED: invalid quantity'), 0)
+    UNION ALL SELECT 'Lines rejected: duplicate line',
+                     COALESCE((SELECT N FROM status WHERE STATUS = 'REJECTED: duplicate line'), 0)
+    UNION ALL SELECT 'Lines rejected: unknown distributor',
+                     COALESCE((SELECT N FROM status WHERE STATUS = 'REJECTED: unknown distributor'), 0)
+    UNION ALL SELECT 'Duplicate ACTIVE CRM accounts per distributor',
+                     (SELECT COUNT(*) FROM (SELECT DIST_CODE FROM CRM_ACCOUNTS WHERE STATUS = 'Active'
+                                            GROUP BY 1 HAVING COUNT(*) > 1))
+)
+SELECT CHECK_NAME, FAILURES, IFF(FAILURES = 0, 'PASS', 'FAIL') AS RESULT FROM checks;
+
+SELECT * FROM VW_POS_DQ_CHECKS;
+-- expect: control mismatch 148, missing 2, late 18, unmapped 51, invalid qty 19, duplicates 146, others 0
+SELECT * FROM VW_MISSING_SUBMISSIONS;           -- APG, 2026-05-11 and 2026-05-18
+SELECT DIST_SKU, COUNT(*) FROM VW_POS_REJECTS WHERE STATUS = 'REJECTED: unmapped SKU' GROUP BY 1;

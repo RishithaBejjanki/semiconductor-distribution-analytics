@@ -1,0 +1,24 @@
+-- =====================================================================
+-- LEGACY: "Monthly Distributor Performance" report query (inherited)
+-- Find the bugs before reading 02_refactored_query.sql.
+-- =====================================================================
+USE WAREHOUSE ANALYTICS_WH;
+USE DATABASE CHANNEL_ANALYTICS;
+
+CREATE OR REPLACE VIEW RPT.VW_MONTHLY_DIST_PERF_LEGACY AS
+SELECT DISTINCT
+       d.DISTRIBUTOR_NAME,
+       DATE_TRUNC('month', b.INVOICE_DATE)           AS REPORT_MONTH,
+       SUM(o.ORDER_QTY * o.UNIT_PRICE)               AS BOOKINGS,
+       SUM(s.QTY_SHIPPED * o.UNIT_PRICE)             AS SHIPMENTS,
+       SUM(b.AMOUNT)                                 AS BILLINGS,
+       SUM(b.AMOUNT) / SUM(o.ORDER_QTY * o.UNIT_PRICE) AS BILL_TO_BOOK
+FROM RAW.DIM_DISTRIBUTOR d
+LEFT JOIN RAW.FACT_ORDERS    o ON d.DISTRIBUTOR_ID = o.DISTRIBUTOR_ID
+LEFT JOIN RAW.FACT_SHIPMENTS s ON o.ORDER_ID = s.ORDER_ID AND o.LINE_ID = s.LINE_ID
+LEFT JOIN RAW.FACT_BILLING   b ON o.ORDER_ID = b.ORDER_ID AND o.LINE_ID = b.LINE_ID
+WHERE b.INVOICE_DATE >= '2025-01-01'
+  AND o.PART_NUMBER NOT IN (SELECT PART_NUMBER FROM RPT.EXCLUDED_PARTS)
+GROUP BY d.DISTRIBUTOR_NAME, DATE_TRUNC('month', b.INVOICE_DATE);
+
+SELECT * FROM RPT.VW_MONTHLY_DIST_PERF_LEGACY ORDER BY REPORT_MONTH, DISTRIBUTOR_NAME;

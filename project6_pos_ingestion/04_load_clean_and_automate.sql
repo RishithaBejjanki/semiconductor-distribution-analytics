@@ -1,0 +1,93 @@
+-- =====================================================================
+-- PROJECT 6 - LOAD (incremental MERGE) + AUTOMATE (procedure + task)
+-- =====================================================================
+USE WAREHOUSE ANALYTICS_WH;
+USE DATABASE CHANNEL_ANALYTICS;
+
+CREATE TABLE IF NOT EXISTS CLEAN.FACT_POS_CLEAN (
+    DISTRIBUTOR_ID STRING, PART_NUMBER STRING, WEEK_START DATE,
+    UNITS_SOLD NUMBER, RESALE_VALUE NUMBER(14,2),
+    SOURCE_SUBMISSION_ID STRING, UPDATED_AT TIMESTAMP_LTZ);
+
+CREATE TABLE IF NOT EXISTS STG.PIPELINE_RUN_LOG (
+    RUN_AT TIMESTAMP_LTZ, ROWS_MERGED NUMBER, LINES_REJECTED NUMBER, DQ_CHECKS_FAILED NUMBER, NOTE STRING);
+
+-- The whole pipeline in one procedure: copy new files -> merge -> log
+CREATE OR REPLACE PROCEDURE STG.SP_LOAD_POS()
+RETURNS STRING
+LANGUAGE SQL
+AS
+$$
+DECLARE
+    rows_merged INTEGER DEFAULT 0;
+BEGIN
+    COPY INTO STG.RAW_POS_SUBMISSIONS (SRC, FILE_NAME, LOADED_AT)
+    FROM (SELECT $1, METADATA$FILENAME, CURRENT_TIMESTAMP() FROM @STG.POS_STAGE)
+    PATTERN = '.*pos_.*[.]json';
+
+    MERGE INTO CLEAN.FACT_POS_CLEAN t
+    USING (
+        SELECT DISTRIBUTOR_ID, PART_NUMBER, REPORT_WEEK AS WEEK_START,
+               SUM(QTY) AS UNITS_SOLD, SUM(RESALE_USD) AS RESALE_VALUE,
+               MAX(SUBMISSION_ID) AS SOURCE_SUBMISSION_ID
+        FROM STG.VW_POS_LINES_VALIDATED
+        WHERE STATUS = 'ACCEPTED'
+        GROUP BY 1, 2, 3
+    ) s
+    ON  t.DISTRIBUTOR_ID = s.DISTRIBUTOR_ID
+    AND t.PART_NUMBER    = s.PART_NUMBER
+    AND t.WEEK_START     = s.WEEK_START
+    WHEN MATCHED AND (t.UNITS_SOLD <> s.UNITS_SOLD OR t.RESALE_VALUE <> s.RESALE_VALUE) THEN UPDATE SET
+        UNITS_SOLD = s.UNITS_SOLD, RESALE_VALUE = s.RESALE_VALUE,
+        SOURCE_SUBMISSION_ID = s.SOURCE_SUBMISSION_ID, UPDATED_AT = CURRENT_TIMESTAMP()
+    WHEN NOT MATCHED THEN INSERT
+        (DISTRIBUTOR_ID, PART_NUMBER, WEEK_START, UNITS_SOLD, RESALE_VALUE, SOURCE_SUBMISSION_ID, UPDATED_AT)
+        VALUES (s.DISTRIBUTOR_ID, s.PART_NUMBER, s.WEEK_START, s.UNITS_SOLD, s.RESALE_VALUE,
+                s.SOURCE_SUBMISSION_ID, CURRENT_TIMESTAMP());
+    rows_merged := SQLROWCOUNT;
+
+    INSERT INTO STG.PIPELINE_RUN_LOG
+    SELECT CURRENT_TIMESTAMP(), :rows_merged,
+           (SELECT COUNT(*) FROM STG.VW_POS_REJECTS),
+           (SELECT COUNT(*) FROM STG.VW_POS_DQ_CHECKS WHERE RESULT = 'FAIL'),
+           'weekly POS load';
+    RETURN 'Rows inserted/updated: ' || rows_merged;
+END;
+$$;
+
+-- Run it once now (first run inserts ~22,500 rows; a second run should merge 0)
+CALL STG.SP_LOAD_POS();
+CALL STG.SP_LOAD_POS();
+SELECT * FROM STG.PIPELINE_RUN_LOG ORDER BY RUN_AT;
+
+-- Schedule: every Monday 7am Phoenix time
+CREATE OR REPLACE TASK STG.TASK_WEEKLY_POS_LOAD
+    WAREHOUSE = ANALYTICS_WH
+    SCHEDULE  = 'USING CRON 0 7 * * 1 America/Phoenix'
+AS
+    CALL STG.SP_LOAD_POS();
+
+ALTER TASK STG.TASK_WEEKLY_POS_LOAD RESUME;    -- tasks are created suspended
+SHOW TASKS IN SCHEMA STG;
+-- Take your screenshot, then suspend it so the trial doesn't burn credits:
+ALTER TASK STG.TASK_WEEKLY_POS_LOAD SUSPEND;
+
+-- =====================================================================
+-- Reconcile the pipeline output to the true POS from Project 1
+-- Every difference should be explained by a DQ finding above.
+-- =====================================================================
+WITH t AS (SELECT DISTRIBUTOR_ID, PART_NUMBER, WEEK_START, UNITS_SOLD FROM RAW.FACT_POS WHERE UNITS_SOLD > 0),
+     c AS (SELECT DISTRIBUTOR_ID, PART_NUMBER, WEEK_START, UNITS_SOLD FROM CLEAN.FACT_POS_CLEAN)
+SELECT CASE WHEN c.UNITS_SOLD IS NULL THEN 'Missing in pipeline'
+            WHEN t.UNITS_SOLD IS NULL THEN 'Extra in pipeline'
+            WHEN c.UNITS_SOLD = t.UNITS_SOLD THEN 'Match'
+            ELSE 'Qty differs' END           AS STATUS,
+       COUNT(*)                              AS ROWS_,
+       SUM(t.UNITS_SOLD)                     AS TRUE_UNITS,
+       SUM(c.UNITS_SOLD)                     AS PIPELINE_UNITS
+FROM t
+FULL OUTER JOIN c
+  ON t.DISTRIBUTOR_ID = c.DISTRIBUTOR_ID AND t.PART_NUMBER = c.PART_NUMBER AND t.WEEK_START = c.WEEK_START
+GROUP BY 1
+ORDER BY 2 DESC;
+-- expect: Match 22,519 (99.6%) | Missing 85 | Qty differs 16
