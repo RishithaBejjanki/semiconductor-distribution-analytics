@@ -1,0 +1,8 @@
+account_id,account_name,dist_code,erp_distributor_id,region,status
+001A00001XYZ,Northstar Components Inc.,NSC,D01,Americas,Active
+001A00002XYZ,Pacific Rim Electronics Ltd,PRE,D02,APAC,Active
+001A00003XYZ,Meridian Supply GmbH,MRS,D03,EMEA,Active
+001A00004XYZ,Summit Electronic Distribution LLC,SED,D04,Americas,Active
+001A00005XYZ,Lotus Semiconductor Trading Pte Ltd,LST,D05,APAC,Active
+001A00006XYZ,Alpine Parts Group AG,APG,D06,EMEA,Active
+001A00099XYZ,Pacific Rim Electronics Ltd (legacy),PRE,D02,APAC,Inactive

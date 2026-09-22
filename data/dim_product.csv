@@ -1,0 +1,43 @@
+part_number,product_family,end_market,list_price,lead_time_weeks,pack_qty
+PM-1001,Power MOSFET,Industrial,1.01,10,500
+PM-1002,Power MOSFET,Industrial,1.08,10,500
+PM-1003,Power MOSFET,Industrial,0.43,10,500
+PM-1004,Power MOSFET,Industrial,1.0,10,500
+PM-1005,Power MOSFET,Industrial,0.46,10,500
+PM-1006,Power MOSFET,Industrial,0.67,10,500
+PM-1007,Power MOSFET,Industrial,0.9,10,500
+IG-1008,IGBT Module,Industrial,36.62,16,10
+IG-1009,IGBT Module,Industrial,41.29,16,10
+IG-1010,IGBT Module,Industrial,52.76,16,10
+IG-1011,IGBT Module,Industrial,49.84,16,10
+IG-1012,IGBT Module,Industrial,58.77,16,10
+IG-1013,IGBT Module,Industrial,50.69,16,10
+IG-1014,IGBT Module,Industrial,37.6,16,10
+SC-1015,SiC MOSFET,Automotive,8.93,20,50
+SC-1016,SiC MOSFET,Automotive,20.15,20,50
+SC-1017,SiC MOSFET,Automotive,12.19,20,50
+SC-1018,SiC MOSFET,Automotive,14.92,20,50
+SC-1019,SiC MOSFET,Automotive,8.47,20,50
+SC-1020,SiC MOSFET,Automotive,10.31,20,50
+SC-1021,SiC MOSFET,Automotive,14.31,20,50
+IS-1022,Image Sensor,Automotive,11.7,12,50
+IS-1023,Image Sensor,Automotive,13.15,12,50
+IS-1024,Image Sensor,Automotive,8.26,12,50
+IS-1025,Image Sensor,Automotive,11.51,12,50
+IS-1026,Image Sensor,Automotive,6.2,12,50
+IS-1027,Image Sensor,Automotive,12.66,12,50
+IS-1028,Image Sensor,Automotive,11.76,12,50
+PW-1029,PMIC,Consumer,3.11,12,250
+PW-1030,PMIC,Consumer,1.99,12,250
+PW-1031,PMIC,Consumer,3.84,12,250
+PW-1032,PMIC,Consumer,3.48,12,250
+PW-1033,PMIC,Consumer,3.72,12,250
+PW-1034,PMIC,Consumer,3.46,12,250
+PW-1035,PMIC,Consumer,1.61,12,250
+LD-1036,LDO Regulator,Consumer,0.25,8,1000
+LD-1037,LDO Regulator,Consumer,0.53,8,1000
+LD-1038,LDO Regulator,Consumer,0.18,8,1000
+LD-1039,LDO Regulator,Consumer,0.28,8,1000
+LD-1040,LDO Regulator,Consumer,0.4,8,1000
+LD-1041,LDO Regulator,Consumer,0.45,8,1000
+LD-1042,LDO Regulator,Consumer,0.52,8,1000
