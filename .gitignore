@@ -1,0 +1,10 @@
+# personal notes and local clutter
+my_results.txt
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+.DS_Store
+Thumbs.db
+# Excel / Office lock files
+~$*

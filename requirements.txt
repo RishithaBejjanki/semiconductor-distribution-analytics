@@ -1,0 +1,8 @@
+pandas>=2.0
+numpy>=1.24
+openpyxl>=3.1
+statsmodels>=0.14
+duckdb>=1.0
+matplotlib>=3.7
+# only needed for the --snowflake mode of Project 4 and tools/load_csvs_to_snowflake.py
+snowflake-connector-python[pandas]>=3.0
